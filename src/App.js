@@ -573,7 +573,7 @@ function StatsTab({ posts, profile }) {
   const now = new Date();
   const [selYear, setSelYear] = useState(now.getFullYear());
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1);
-  const [shareUrl, setShareUrl] = useState(null);
+  const [capturing, setCapturing] = useState(false);
 
   const months = [...new Set(posts.map(p => { const d = new Date(p.date); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; }))].sort().reverse();
   const isSel = (d) => { const t = new Date(d); return t.getFullYear() === selYear && t.getMonth()+1 === selMonth; };
@@ -584,113 +584,150 @@ function StatsTab({ posts, profile }) {
   const totalInc = income.reduce((s,p) => s+p.amount, 0);
   const cashExp = expense.filter(p => !p.payMethod||p.payMethod==="cash").reduce((s,p)=>s+p.amount,0);
   const cardExp = expense.filter(p => p.payMethod==="card").reduce((s,p)=>s+p.amount,0);
-  const categoryStats = CATEGORIES.map(c => ({ id:c.id, amount: expense.filter(p=>p.category===c.id).reduce((s,p)=>s+p.amount,0) })).filter(c=>c.amount>0).sort((a,b)=>b.amount-a.amount);
 
-  // ★ [수정] 긴 주소를 카톡에 직접 뿌리지 않고 스마트폰 공유 기능을 호출합니다!
-  const handleShare = () => {
-    const data = {
-      nickname: profile?.nickname || "나",
-      year: selYear, month: selMonth,
-      totalInc, totalExp, cashExp, cardExp,
-      categoryStats,
-      records: mp.sort((a,b) => new Date(b.date)-new Date(a.date)).map(p => ({ type:p.type, amount:p.amount, memo:p.memo, date:p.date, category:p.category, sticker:p.sticker }))
-    };
-    const encoded = encodeData(data);
-    if (!encoded) { alert("공유 링크 생성 실패 😢"); return; }
+  // ★ [핵심 기능] 화면을 캡처해서 이미지 파일로 공유하는 함수
+  const handleShareImage = async () => {
+    setCapturing(true);
     
-    const url = `${window.location.origin}?stats=${encoded}`;
-    const title = `📊 ${profile?.nickname || "나"}의 ${selMonth}월 용돈일기 통계`;
-
-    // 스마트폰 자체 공유하기 기능이 지원되는 경우 (대부분의 모바일 브라우저)
-    if (navigator.share) {
-      navigator.share({
-        title: title,
-        text: `💰 용돈일기에서 보낸 ${profile?.nickname || "나"}의 소비 리포트입니다.`,
-        url: url
-      }).catch(() => {
-        // 공유창 취소 시 예외 처리
-        setShareUrl(url);
+    // 1. 화면 캡처용 라이브러리(html2canvas)가 없으면 인터넷에서 가져오기
+    if (!window.html2canvas) {
+      await new Promise((resolve) => {
+        const script = document.createElement("script");
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+        script.onload = resolve;
+        document.head.appendChild(script);
       });
-    } else {
-      // PC 브라우저 등 지원 안 하면 아래에 링크 복사창 띄워주기
-      setShareUrl(url);
+    }
+
+    // 2. 캡처할 영역 지정 (아래에 정의한 id="stats-print-area" 영역)
+    const target = document.getElementById("stats-print-area");
+    if (!target) {
+      setCapturing(false);
+      return;
+    }
+
+    try {
+      // 3. 라이브러리로 화면을 그래픽 이미지(Canvas)로 굽기
+      const canvas = await window.html2canvas(target, {
+        useCORS: true,      // 이미지 주소 깨짐 방지
+        scale: 2,           // 부모님이 글씨 잘 보이게 2배 고화질로 캡처
+        backgroundColor: "#f4f4f8"
+      });
+
+      // 4. 구워진 이미지를 스마트폰이 인식할 수 있는 실제 파일(Blob)로 변환
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          alert("이미지 생성 실패 😢");
+          setCapturing(false);
+          return;
+        }
+
+        const fileName = `${profile?.nickname || "나"}_${selMonth}월_용돈통계.png`;
+        const file = new File([blob], fileName, { type: "image/png" });
+
+        // 5. 모바일 브라우저 자체 공유창 기능으로 파일 넘겨주기
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `${selMonth}월 용돈일기 통계 리포트`,
+            text: `💰 ${profile?.nickname || "나"}의 소비 정산서 사진입니다.`
+          });
+        } else {
+          // PC 브라우저 등 파일 공유가 불가능한 환경에서는 컴퓨터로 사진 강제 다운로드
+          const a = document.createElement("a");
+          a.href = canvas.toDataURL("image/png");
+          a.download = fileName;
+          a.click();
+          alert("사진이 기기에 다운로드되었습니다! 카톡에 첨부해서 보내보세요 📸");
+        }
+        setCapturing(false);
+      }, "image/png");
+    } catch (err) {
+      console.error(err);
+      alert("캡처 중 오류가 발생했어요 😢");
+      setCapturing(false);
     }
   };
 
-  const copyUrl = () => { navigator.clipboard.writeText(shareUrl).then(() => alert("링크 복사됐어요! 📋")).catch(() => alert(shareUrl)); };
-
   return (
     <div>
+      {/* 월 선택창 */}
       <div style={{ background:"white", borderRadius:20, padding:"14px 16px", marginBottom:16, boxShadow:"0 2px 12px rgba(0,0,0,.06)" }}>
         <div style={{ fontSize:11, fontWeight:800, color:"#bbb", marginBottom:10, letterSpacing:".06em" }}>월 선택</div>
         <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
           {months.length === 0 ? <div style={{ fontSize:13, color:"#ddd" }}>기록이 없어요</div>
             : months.map(m => { const [y,mo] = m.split("-").map(Number); const isActive = y===selYear&&mo===selMonth;
-              return <button key={m} onClick={() => { setSelYear(y); setSelMonth(mo); setShareUrl(null); }} style={{ flexShrink:0, padding:"8px 16px", borderRadius:20, border:`2px solid ${isActive?"#FF6B6B":"#eee"}`, background:isActive?"#FF6B6B":"white", color:isActive?"white":"#888", fontSize:13, fontWeight:700, cursor:"pointer" }}>{y!==now.getFullYear()?`${y}년 `:""}{KR_MONTHS[mo-1]}</button>;
+              return <button key={m} onClick={() => { setSelYear(y); setSelMonth(mo); }} style={{ flexShrink:0, padding:"8px 16px", borderRadius:20, border:`2px solid ${isActive?"#FF6B6B":"#eee"}`, background:isActive?"#FF6B6B":"white", color:isActive?"white":"#888", fontSize:13, fontWeight:700, cursor:"pointer" }}>{y!==now.getFullYear()?`${y}년 `:""}{KR_MONTHS[mo-1]}</button>;
             })}
         </div>
       </div>
 
-      <div style={{ display:"flex", gap:10, marginBottom:14 }}>
-        <div style={{ flex:1, background:"linear-gradient(135deg,#E8F5E9,#F1F8E9)", borderRadius:20, padding:"16px 18px", boxShadow:"0 2px 12px rgba(0,0,0,.06)", border:"2px solid #C8E6C9" }}>
-          <div style={{ fontSize:11, fontWeight:800, color:"#66BB6A", marginBottom:4 }}>{selMonth}월 수입</div>
-          <div style={{ fontSize:22, fontWeight:900, color:"#2E7D32" }}>+{won(totalInc)}</div>
-          <div style={{ fontSize:11, color:"#aaa", marginTop:4 }}>{income.length}건</div>
-        </div>
-        <div style={{ flex:1, background:"linear-gradient(135deg,#FFF3F3,#FFF8F8)", borderRadius:20, padding:"16px 18px", boxShadow:"0 2px 12px rgba(0,0,0,.06)", border:"2px solid #FFCDD2" }}>
-          <div style={{ fontSize:11, fontWeight:800, color:"#FF6B6B", marginBottom:4 }}>{selMonth}월 지출</div>
-          <div style={{ fontSize:22, fontWeight:900, color:"#FF6B6B" }}>-{won(totalExp)}</div>
-          <div style={{ fontSize:11, color:"#aaa", marginTop:4 }}>{expense.length}건</div>
-        </div>
-      </div>
-      <div style={{ display:"flex", gap:10, marginBottom:14 }}>
-        <div style={{ flex:1, background:"white", borderRadius:20, padding:"14px 16px", boxShadow:"0 2px 12px rgba(0,0,0,.06)" }}>
-          <div style={{ fontSize:11, fontWeight:800, color:"#aaa", marginBottom:4 }}>💵 현금 지출</div>
-          <div style={{ fontSize:18, fontWeight:900, color:"#FF6B6B" }}>-{won(cashExp)}</div>
-        </div>
-        <div style={{ flex:1, background:"white", borderRadius:20, padding:"14px 16px", boxShadow:"0 2px 12px rgba(0,0,0,.06)" }}>
-          <div style={{ fontSize:11, fontWeight:800, color:"#aaa", marginBottom:4 }}>💳 카드 지출</div>
-          <div style={{ fontSize:18, fontWeight:900, color:"#45B7D1" }}>-{won(cardExp)}</div>
-        </div>
-      </div>
-
-      {/* 버튼 문구를 '보내기'로 더 직관적으로 수정 */}
-      <button onClick={handleShare} style={{ width:"100%", padding:"14px 0", borderRadius:18, border:"none", background:"linear-gradient(135deg,#FF6B6B,#FF8E53)", color:"white", fontSize:15, fontWeight:900, cursor:"pointer", marginBottom:14, boxShadow:"0 4px 14px rgba(255,107,107,.35)" }}>
-        📤 {selYear !== now.getFullYear() ? `${selYear}년 ` : ""}{KR_MONTHS[selMonth-1]} 통계 부모님께 보내기
+      {/* ★ [변경] 버튼을 누르면 긴 URL 대신 화면 전체를 깔끔한 사진 파일로 변환해서 전송합니다. */}
+      <button onClick={handleShareImage} disabled={capturing} style={{ width:"100%", padding:"14px 0", borderRadius:18, border:"none", background: capturing ? "#ccc" : "linear-gradient(135deg,#FF6B6B,#FF8E53)", color:"white", fontSize:15, fontWeight:900, cursor: capturing ? "not-allowed" : "pointer", marginBottom:14, boxShadow:"0 4px 14px rgba(255,107,107,.35)" }}>
+        {capturing ? "📸 리포트 사진 만드는 중..." : `📸 ${selMonth}월 통계 이미지로 부모님께 보내기`}
       </button>
 
-      {shareUrl && (
-        <div style={{ background:"white", borderRadius:18, padding:18, marginBottom:14, boxShadow:"0 2px 12px rgba(0,0,0,.07)" }}>
-          <div style={{ fontSize:12, color:"#aaa", marginBottom:8 }}>👇 스마트폰 공유가 안 될 시 아래 링크를 복사하세요!</div>
-          <div style={{ fontSize:11, color:"#666", wordBreak:"break-all", marginBottom:12, lineHeight:1.5, background:"#f8f8f8", borderRadius:10, padding:"10px 12px" }}>{shareUrl.length > 50 ? shareUrl.slice(0,50) + "..." : shareUrl}</div>
-          <button onClick={copyUrl} style={{ width:"100%", padding:"12px 0", borderRadius:14, border:"none", background:"linear-gradient(135deg,#FF6B6B,#FF8E53)", color:"white", fontSize:14, fontWeight:800, cursor:"pointer" }}>📋 링크 복사</button>
+      {/* ★ [중요] 여기서부터 맨 아래까지 통째로 묶어서 스크린샷 찰칵 찍어줄 인쇄 구역 지정! */}
+      <div id="stats-print-area" style={{ padding: "2px" }}>
+        
+        {/* 임시 타이틀 배너 (이미지 파일 상단에 부모님이 읽기 좋게 타이틀을 달아줍니다) */}
+        <div style={{ background:"linear-gradient(135deg,#FF6B6B,#FF8E53)", borderRadius:20, padding:"16px", color:"white", textAlign:"center", marginBottom:14 }}>
+          <div style={{ fontSize:12, fontWeight:700, opacity:.8, marginBottom:4 }}>📊 용돈일기 소비 리포트</div>
+          <div style={{ fontSize:18, fontWeight:900 }}>{profile?.nickname || "나"}의 {selMonth}월 통계 보고서</div>
         </div>
-      )}
 
-      <div style={{ background:"white", borderRadius:22, padding:22, marginBottom:14, boxShadow:"0 2px 16px rgba(0,0,0,.06)" }}>
-        <h3 style={{ margin:"0 0 16px", fontWeight:900, fontSize:15, color:"#1a1a2e" }}>📊 카테고리별 지출</h3>
-        {CATEGORIES.map(cc => { const t = expense.filter(p=>p.category===cc.id).reduce((s,p)=>s+p.amount,0); const pct = totalExp>0?(t/totalExp*100):0; if(t===0) return null;
-          return <div key={cc.id} style={{ marginBottom:14 }}><div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}><span style={{ fontSize:13, fontWeight:700 }}>{cc.emoji} {cc.label}</span><span style={{ fontSize:13, fontWeight:900, color:cc.color }}>{won(t)}</span></div><div style={{ height:10, background:"#f4f4f8", borderRadius:8, overflow:"hidden" }}><div style={{ height:"100%", width:`${pct}%`, background:`linear-gradient(90deg,${cc.color},${cc.color}88)`, borderRadius:8, transition:"width .8s ease" }} /></div><div style={{ fontSize:11, color:"#ccc", marginTop:2 }}>{Math.round(pct)}%</div></div>;
-        })}
-        {totalExp === 0 && <div style={{ textAlign:"center", color:"#ddd", padding:"20px 0", fontSize:14 }}>지출 내역이 없어요</div>}
-      </div>
+        {/* 수입/지출 요약 */}
+        <div style={{ display:"flex", gap:10, marginBottom:14 }}>
+          <div style={{ flex:1, background:"linear-gradient(135deg,#E8F5E9,#F1F8E9)", borderRadius:20, padding:"16px 18px", boxShadow:"0 2px 12px rgba(0,0,0,.06)", border:"2px solid #C8E6C9" }}>
+            <div style={{ fontSize:11, fontWeight:800, color:"#66BB6A", marginBottom:4 }}>{selMonth}월 수입</div>
+            <div style={{ fontSize:22, fontWeight:900, color:"#2E7D32" }}>+{won(totalInc)}</div>
+            <div style={{ fontSize:11, color:"#aaa", marginTop:4 }}>{income.length}건</div>
+          </div>
+          <div style={{ flex:1, background:"linear-gradient(135deg,#FFF3F3,#FFF8F8)", borderRadius:20, padding:"16px 18px", boxShadow:"0 2px 12px rgba(0,0,0,.06)", border:"2px solid #FFCDD2" }}>
+            <div style={{ fontSize:11, fontWeight:800, color:"#FF6B6B", marginBottom:4 }}>{selMonth}월 지출</div>
+            <div style={{ fontSize:22, fontWeight:900, color:"#FF6B6B" }}>-{won(totalExp)}</div>
+            <div style={{ fontSize:11, color:"#aaa", marginTop:4 }}>{expense.length}건</div>
+          </div>
+        </div>
+        
+        <div style={{ display:"flex", gap:10, marginBottom:14 }}>
+          <div style={{ flex:1, background:"white", borderRadius:20, padding:"14px 16px", boxShadow:"0 2px 12px rgba(0,0,0,.06)" }}>
+            <div style={{ fontSize:11, fontWeight:800, color:"#aaa", marginBottom:4 }}>💵 현금 지출</div>
+            <div style={{ fontSize:18, fontWeight:900, color:"#FF6B6B" }}>-{won(cashExp)}</div>
+          </div>
+          <div style={{ flex:1, background:"white", borderRadius:20, padding:"14px 16px", boxShadow:"0 2px 12px rgba(0,0,0,.06)" }}>
+            <div style={{ fontSize:11, fontWeight:800, color:"#aaa", marginBottom:4 }}>💳 카드 지출</div>
+            <div style={{ fontSize:18, fontWeight:900, color:"#45B7D1" }}>-{won(cardExp)}</div>
+          </div>
+        </div>
 
-      <div style={{ background:"white", borderRadius:22, padding:22, boxShadow:"0 2px 16px rgba(0,0,0,.06)" }}>
-        <h3 style={{ margin:"0 0 16px", fontWeight:900, fontSize:15, color:"#1a1a2e" }}>🕐 {selMonth}월 전체 기록</h3>
-        {mp.length===0 ? <div style={{ textAlign:"center", padding:"30px 0", color:"#ddd", fontSize:14 }}>이 달의 기록이 없어요</div>
-          : [...mp].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(p => { const isInc=p.type==="income"; const c=isInc?{color:"#66BB6A",emoji:"💵",label:"수입"}:CAT(p.category);
-            return <div key={p.id} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14, paddingBottom:14, borderBottom:"1px solid #f8f8f8" }}>
-              <div style={{ width:44, height:44, borderRadius:14, background:isInc?"#E8F5E9":`${c.color}18`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0 }}>{p.sticker||c.emoji}</div>
-              <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, fontWeight:700, color:"#1a1a2e", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.memo||"기록 없음"}</div><div style={{ fontSize:11, color:"#bbb", marginTop:2 }}>{fmtD(p.date)} · {c.label}</div></div>
-              <div style={{ fontWeight:900, color:isInc?"#2E7D32":c.color, fontSize:14, flexShrink:0 }}>{isInc?"+":"-"}{won(p.amount)}</div>
-            </div>;
-          })
-        }
+        {/* 카테고리별 지출 */}
+        <div style={{ background:"white", borderRadius:22, padding:22, marginBottom:14, boxShadow:"0 2px 16px rgba(0,0,0,.06)" }}>
+          <h3 style={{ margin:"0 0 16px", fontWeight:900, fontSize:15, color:"#1a1a2e" }}>📊 카테고리별 지출</h3>
+          {CATEGORIES.map(cc => { const t = expense.filter(p=>p.category===cc.id).reduce((s,p)=>s+p.amount,0); const pct = totalExp>0?(t/totalExp*100):0; if(t===0) return null;
+            return <div key={cc.id} style={{ marginBottom:14 }}><div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}><span style={{ fontSize:13, fontWeight:700 }}>{cc.emoji} {cc.label}</span><span style={{ fontSize:13, fontWeight:900, color:cc.color }}>{won(t)}</span></div><div style={{ height:10, background:"#f4f4f8", borderRadius:8, overflow:"hidden" }}><div style={{ height:"100%", width:`${pct}%`, background:`linear-gradient(90deg,${cc.color},${cc.color}88)`, borderRadius:8, transition:"width .8s ease" }} /></div><div style={{ fontSize:11, color:"#ccc", marginTop:2 }}>{Math.round(pct)}%</div></div>;
+          })}
+          {totalExp === 0 && <div style={{ textAlign:"center", color:"#ddd", padding:"20px 0", fontSize:14 }}>지출 내역이 없어요</div>}
+        </div>
+
+        {/* 전체 기록 목록 */}
+        <div style={{ background:"white", borderRadius:22, padding:22, boxShadow:"0 2px 16px rgba(0,0,0,.06)" }}>
+          <h3 style={{ margin:"0 0 16px", fontWeight:900, fontSize:15, color:"#1a1a2e" }}>🕐 {selMonth}월 전체 기록</h3>
+          {mp.length===0 ? <div style={{ textAlign:"center", padding:"30px 0", color:"#ddd", fontSize:14 }}>이 달의 기록이 없어요</div>
+            : [...mp].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(p => { const isInc=p.type==="income"; const c=isInc?{color:"#66BB6A",emoji:"💵",label:"수입"}:CAT(p.category);
+              return <div key={p.id} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14, paddingBottom:14, borderBottom:"1px solid #f8f8f8" }}>
+                <div style={{ width:44, height:44, borderRadius:14, background:isInc?"#E8F5E9":`${c.color}18`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0 }}>{p.sticker||c.emoji}</div>
+                <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, fontWeight:700, color:"#1a1a2e", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.memo||"기록 없음"}</div><div style={{ fontSize:11, color:"#bbb", marginTop:2 }}>{fmtD(p.date)} · {c.label}</div></div>
+                <div style={{ fontWeight:900, color:isInc?"#2E7D32":c.color, fontSize:14, flexShrink:0 }}>{isInc?"+":"-"}{won(p.amount)}</div>
+              </div>;
+            })
+          }
+        </div>
+
       </div>
     </div>
   );
 }
-
 function PostDetailModal({ post, profile, onClose, onLike, onDelete, onEdit }) {
   const [liked, setLiked] = useState(post.liked); const [heart, setHeart] = useState(false);
   const c = post.type==="income"?{color:"#66BB6A",emoji:"💵",label:"수입"}:CAT(post.category);
