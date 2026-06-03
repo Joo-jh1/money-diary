@@ -764,9 +764,10 @@ function ProfileEditModal({ profile, onSave, onClose }) {
 }
 
 // ════════════════════════════════════════════════════════════
-// 메인 앱 (직관적 잔액 계산 방식)
+// 메인 앱 (공유 링크 버그 수정 완료)
 // ════════════════════════════════════════════════════════════
 export default function App() {
+  // ★ [수정] 공유 링크 체크를 가장 먼저 실행합니다! (프로필이 없어도 링크가 있으면 통계 화면을 먼저 보여줌)
   const statsParam = new URLSearchParams(window.location.search).get("stats");
   if (statsParam) {
     const data = decodeData(statsParam);
@@ -797,13 +798,12 @@ export default function App() {
     }
   }, []);
 
-  // 단순 동기화용 이펙트
   useEffect(() => { LS.set("yd_profile", profile); }, [profile]);
   useEffect(() => { LS.set("yd_posts",   posts);   }, [posts]);
   useEffect(() => { LS.set("yd_wallet",  wallet);  }, [wallet]);
   useEffect(() => { LS.set("yd_goal",    goal);    }, [goal]);
 
-// 1. 게시물 추가 시 잔액 연산 (완전 마이너스 허용)
+  // 1. 게시물 추가 시 잔액 연산
   const handleAdd = useCallback(p => {
     setPosts(prev => [p, ...prev]);
     setWallet(prev => { 
@@ -821,7 +821,7 @@ export default function App() {
 
   const handleEdit = useCallback(p => setEditPost(p), []);
   
-  // 2. 게시물 수정 시 잔액 연산 (완전 마이너스 허용)
+  // 2. 게시물 수정 시 잔액 연산
   const handleSaveEdit = useCallback(updated => {
     setPosts(prev => {
       const oldPost = prev.find(p => p.id === updated.id);
@@ -830,7 +830,6 @@ export default function App() {
       setWallet(walletPrev => {
         const n = { ...walletPrev };
 
-        // [단계 1] 기존 금액 원상복구
         if (oldPost.type === "income") {
           if (oldPost.payMethod === "card") n.card = (n.card || 0) - oldPost.amount;
           else n.cash = (n.cash || 0) - oldPost.amount;
@@ -839,7 +838,6 @@ export default function App() {
           else n.cash = (n.cash || 0) + oldPost.amount;
         }
 
-        // [단계 2] 새로운 금액 적용
         if (updated.type === "income") {
           if (updated.payMethod === "card") n.card = (n.card || 0) + updated.amount;
           else n.cash = (n.cash || 0) + updated.amount;
@@ -857,7 +855,7 @@ export default function App() {
 
   const handleLike = useCallback(id => setPosts(prev => prev.map(p => p.id===id?{...p,liked:true}:p)), []);
 
-  // 3. 게시물 삭제 시 잔액 연산 (완전 마이너스 허용)
+  // 3. 게시물 삭제 시 잔액 연산
   const handleDelete = useCallback(id => {
     if (window.confirm("이 게시물을 삭제할까요?")) {
       setPosts(prev => {
@@ -881,6 +879,7 @@ export default function App() {
     }
   }, []);
 
+  // ★ 공유 링크 체크가 끝난 '이후'에 내 프로필이 있는지 검사합니다.
   if (!profile) return (<><style>{G}</style><Onboarding onDone={p=>setProfile(p)} /></>);
 
   return (
