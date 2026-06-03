@@ -722,7 +722,7 @@ export default function App() {
   const [posts,   setPosts]   = useState(() => LS.get("yd_posts", []));
   const [wallet,  setWallet]  = useState(() => LS.get("yd_wallet", { cash:0, card:0 }));
   const [goal,    setGoal]    = useState(() => LS.get("yd_goal", null));
-  const [tab,     setTab]     = useState("feed");
+  const [tab,      setTab]      = useState("feed");
   const [showAdd,    setShowAdd]    = useState(false);
   const [showIncome, setShowIncome] = useState(false);
   const [editPost,   setEditPost]   = useState(null);
@@ -747,15 +747,86 @@ export default function App() {
   useEffect(() => { LS.set("yd_wallet",  wallet);  }, [wallet]);
   useEffect(() => { LS.set("yd_goal",    goal);    }, [goal]);
 
+  // 1. 게시물 추가 시 잔액 반영
   const handleAdd = useCallback(p => {
     setPosts(prev => [p, ...prev]);
-    setWallet(prev => { const n={...prev}; if(p.type==="income"){if(p.payMethod==="card")n.card=(n.card||0)+p.amount;else n.cash=(n.cash||0)+p.amount;}else{if(p.payMethod==="card")n.card=Math.max(0,(n.card||0)-p.amount);else n.cash=Math.max(0,(n.cash||0)-p.amount);} return n; });
+    setWallet(prev => { 
+      const n={...prev}; 
+      if(p.type==="income"){
+        if(p.payMethod==="card") n.card=(n.card||0)+p.amount;
+        else n.cash=(n.cash||0)+p.amount;
+      }else{
+        if(p.payMethod==="card") n.card=Math.max(0,(n.card||0)-p.amount);
+        else n.cash=Math.max(0,(n.cash||0)-p.amount);
+      } 
+      return n; 
+    });
   }, []);
 
-  const handleEdit     = useCallback(p => setEditPost(p), []);
-  const handleSaveEdit = useCallback(updated => setPosts(prev => prev.map(p => p.id===updated.id?updated:p)), []);
-  const handleLike     = useCallback(id => setPosts(prev => prev.map(p => p.id===id?{...p,liked:true}:p)), []);
-  const handleDelete   = useCallback(id => { if(window.confirm("이 게시물을 삭제할까요?")) setPosts(prev=>prev.filter(p=>p.id!==id)); }, []);
+  const handleEdit = useCallback(p => setEditPost(p), []);
+
+  // 2. 게시물 수정 시 잔액 반영 (★수정됨)
+  const handleSaveEdit = useCallback(updated => {
+    setPosts(prev => {
+      const oldPost = prev.find(p => p.id === updated.id);
+      if (!oldPost) return prev;
+
+      setWallet(walletPrev => {
+        const n = { ...walletPrev };
+
+        // [단계 1] 수정 전 예전 금액 지갑에서 원상복구(취소) 하기
+        if (oldPost.type === "income") {
+          if (oldPost.payMethod === "card") n.card = Math.max(0, (n.card || 0) - oldPost.amount);
+          else n.cash = Math.max(0, (n.cash || 0) - oldPost.amount);
+        } else {
+          if (oldPost.payMethod === "card") n.card = (n.card || 0) + oldPost.amount;
+          else n.cash = (n.cash || 0) + oldPost.amount;
+        }
+
+        // [단계 2] 새롭게 수정한 금액 지갑에 적용하기
+        if (updated.type === "income") {
+          if (updated.payMethod === "card") n.card = (n.card || 0) + updated.amount;
+          else n.cash = (n.cash || 0) + updated.amount;
+        } else {
+          if (updated.payMethod === "card") n.card = Math.max(0, (n.card || 0) - updated.amount);
+          else n.cash = Math.max(0, (n.cash || 0) - updated.amount);
+        }
+
+        return n;
+      });
+
+      return prev.map(p => p.id === updated.id ? updated : p);
+    });
+  }, []);
+
+  const handleLike = useCallback(id => setPosts(prev => prev.map(p => p.id===id?{...p,liked:true}:p)), []);
+
+  // 3. 게시물 삭제 시 잔액 반영 (★수정됨)
+  const handleDelete = useCallback(id => {
+    if (window.confirm("이 게시물을 삭제할까요?")) {
+      setPosts(prev => {
+        const targetPost = prev.find(p => p.id === id);
+        if (!targetPost) return prev;
+
+        setWallet(walletPrev => {
+          const n = { ...walletPrev };
+
+          // 돈을 썼던 걸 지우면 잔액을 늘려주고, 받았던 걸 지우면 잔액을 줄여줌
+          if (targetPost.type === "income") {
+            if (targetPost.payMethod === "card") n.card = Math.max(0, (n.card || 0) - targetPost.amount);
+            else n.cash = Math.max(0, (n.cash || 0) - targetPost.amount);
+          } else {
+            if (targetPost.payMethod === "card") n.card = (n.card || 0) + targetPost.amount;
+            else n.cash = (n.cash || 0) + targetPost.amount;
+          }
+
+          return n;
+        });
+
+        return prev.filter(p => p.id !== id);
+      });
+    }
+  }, []);
 
   if (!profile) return (<><style>{G}</style><Onboarding onDone={p=>setProfile(p)} /></>);
 
