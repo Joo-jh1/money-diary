@@ -586,6 +586,7 @@ function StatsTab({ posts, profile }) {
   const cardExp = expense.filter(p => p.payMethod==="card").reduce((s,p)=>s+p.amount,0);
   const categoryStats = CATEGORIES.map(c => ({ id:c.id, amount: expense.filter(p=>p.category===c.id).reduce((s,p)=>s+p.amount,0) })).filter(c=>c.amount>0).sort((a,b)=>b.amount-a.amount);
 
+  // ★ [수정] 긴 주소를 카톡에 직접 뿌리지 않고 스마트폰 공유 기능을 호출합니다!
   const handleShare = () => {
     const data = {
       nickname: profile?.nickname || "나",
@@ -596,8 +597,24 @@ function StatsTab({ posts, profile }) {
     };
     const encoded = encodeData(data);
     if (!encoded) { alert("공유 링크 생성 실패 😢"); return; }
+    
     const url = `${window.location.origin}?stats=${encoded}`;
-    setShareUrl(url);
+    const title = `📊 ${profile?.nickname || "나"}의 ${selMonth}월 용돈일기 통계`;
+
+    // 스마트폰 자체 공유하기 기능이 지원되는 경우 (대부분의 모바일 브라우저)
+    if (navigator.share) {
+      navigator.share({
+        title: title,
+        text: `💰 용돈일기에서 보낸 ${profile?.nickname || "나"}의 소비 리포트입니다.`,
+        url: url
+      }).catch(() => {
+        // 공유창 취소 시 예외 처리
+        setShareUrl(url);
+      });
+    } else {
+      // PC 브라우저 등 지원 안 하면 아래에 링크 복사창 띄워주기
+      setShareUrl(url);
+    }
   };
 
   const copyUrl = () => { navigator.clipboard.writeText(shareUrl).then(() => alert("링크 복사됐어요! 📋")).catch(() => alert(shareUrl)); };
@@ -637,14 +654,15 @@ function StatsTab({ posts, profile }) {
         </div>
       </div>
 
+      {/* 버튼 문구를 '보내기'로 더 직관적으로 수정 */}
       <button onClick={handleShare} style={{ width:"100%", padding:"14px 0", borderRadius:18, border:"none", background:"linear-gradient(135deg,#FF6B6B,#FF8E53)", color:"white", fontSize:15, fontWeight:900, cursor:"pointer", marginBottom:14, boxShadow:"0 4px 14px rgba(255,107,107,.35)" }}>
-        📤 {selYear !== now.getFullYear() ? `${selYear}년 ` : ""}{KR_MONTHS[selMonth-1]} 통계 공유하기
+        📤 {selYear !== now.getFullYear() ? `${selYear}년 ` : ""}{KR_MONTHS[selMonth-1]} 통계 부모님께 보내기
       </button>
 
       {shareUrl && (
         <div style={{ background:"white", borderRadius:18, padding:18, marginBottom:14, boxShadow:"0 2px 12px rgba(0,0,0,.07)" }}>
-          <div style={{ fontSize:12, color:"#aaa", marginBottom:8 }}>👇 이 링크를 부모님께 보내세요!</div>
-          <div style={{ fontSize:11, color:"#666", wordBreak:"break-all", marginBottom:12, lineHeight:1.5, background:"#f8f8f8", borderRadius:10, padding:"10px 12px" }}>{shareUrl.length > 80 ? shareUrl.slice(0,80) + "..." : shareUrl}</div>
+          <div style={{ fontSize:12, color:"#aaa", marginBottom:8 }}>👇 스마트폰 공유가 안 될 시 아래 링크를 복사하세요!</div>
+          <div style={{ fontSize:11, color:"#666", wordBreak:"break-all", marginBottom:12, lineHeight:1.5, background:"#f8f8f8", borderRadius:10, padding:"10px 12px" }}>{shareUrl.length > 50 ? shareUrl.slice(0,50) + "..." : shareUrl}</div>
           <button onClick={copyUrl} style={{ width:"100%", padding:"12px 0", borderRadius:14, border:"none", background:"linear-gradient(135deg,#FF6B6B,#FF8E53)", color:"white", fontSize:14, fontWeight:800, cursor:"pointer" }}>📋 링크 복사</button>
         </div>
       )}
