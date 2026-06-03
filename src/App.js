@@ -51,7 +51,7 @@ async function uploadToCloudinary(dataUrl) {
   } catch { return dataUrl; }
 }
 
-const won  = (n) => Number(n || 0).toLocaleString("ko-KR") + "원";
+const won  = (n) => n < 0 ? "-" + Number(Math.abs(n)).toLocaleString("ko-KR") + "원" : Number(n || 0).toLocaleString("ko-KR") + "원";
 const fmtD = (d) => new Date(d).toLocaleDateString("ko-KR", { month: "short", day: "numeric", weekday: "short" });
 const thisMonth = (d) => { const n = new Date(), t = new Date(d); return n.getFullYear() === t.getFullYear() && n.getMonth() === t.getMonth(); };
 const KR_MONTHS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
@@ -217,30 +217,35 @@ function WalletCard({ wallet, posts, onEdit }) {
   const mp = posts.filter(p => thisMonth(p.date) && p.type !== "income");
   const spentCash = mp.filter(p => p.payMethod === "cash" || !p.payMethod).reduce((s,p) => s+p.amount, 0);
   const spentCard = mp.filter(p => p.payMethod === "card").reduce((s,p) => s+p.amount, 0);
-  const currentCash = cash - spentCash;
-const currentCard = card - spentCard;
-const currentTotal = currentCash + currentCard;
-  const warn = total > 0 && (total / (total + spentCash + spentCard)) < 0.2;
+  
+  // 잔액이 0원 미만(마이너스)인지 확인하는 조건
+  const isMinus = total < 0;
+  const warn = isMinus || (total > 0 && (total / (total + spentCash + spentCard)) < 0.2);
+
   return (
     <div style={{ background:"linear-gradient(135deg,#FF6B6B,#FF8E53)", borderRadius:24, padding:"20px 20px 18px", marginBottom:16, color:"white", position:"relative", overflow:"hidden", boxShadow:"0 8px 28px rgba(255,107,107,0.32)" }}>
       <div style={{ position:"absolute", right:-24, top:-24, width:110, height:110, borderRadius:"50%", background:"rgba(255,255,255,.08)", pointerEvents:"none" }} />
       <div style={{ marginBottom:16, position:"relative", zIndex:10 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:4 }}>
-          <div style={{ fontSize:11, fontWeight:700, opacity:.75, letterSpacing:".06em", paddingTop:4 }}>💰 총 잔액</div>
+          {/* 마이너스면 총 잔액 글씨도 노란색 경고로 변경 */}
+          <div style={{ fontSize:11, fontWeight:700, color: isMinus ? "#FFD93D" : "white", opacity:.9, letterSpacing:".06em", paddingTop:4 }}>💰 총 잔액</div>
           <button onClick={onEdit} style={{ background:"rgba(255,255,255,.28)", border:"2px solid rgba(255,255,255,.5)", color:"white", borderRadius:12, padding:"8px 18px", fontSize:14, cursor:"pointer", fontWeight:800, zIndex:20, position:"relative" }}>✏️ 설정</button>
         </div>
-        <div style={{ fontSize:34, fontWeight:900, letterSpacing:"-1px", color: warn ? "#FFD93D" : "white", marginBottom:4 }}>{won(total)}</div>
-        {warn && <div style={{ fontSize:11, color:"#FFD93D", fontWeight:800 }}>⚠️ 잔액이 얼마 없어요!</div>}
+        {/* ★ 마이너스면 금액 숫자가 새빨간색(#FF2A2A)으로 화끈하게 바뀝니다! */}
+        <div style={{ fontSize:34, fontWeight:900, letterSpacing:"-1px", color: isMinus ? "#FF2A2A" : "white", marginBottom:4 }}>{won(total)}</div>
+        {isMinus && <div style={{ fontSize:12, color:"#FFD93D", fontWeight:900, animation:"pulse 1s infinite" }}>⚠️ 가진 돈보다 더 많이 썼어요!</div>}
       </div>
       <div style={{ display:"flex", gap:10, position:"relative", zIndex:10 }}>
         <div style={{ flex:1, background:"rgba(255,255,255,.15)", borderRadius:16, padding:"12px 14px" }}>
           <div style={{ fontSize:10, fontWeight:800, opacity:.85, marginBottom:4 }}>💵 현금</div>
-          <div style={{ fontSize:20, fontWeight:900 }}>{won(cash)}</div>
+          {/* 현금이 마이너스면 빨간색으로 변경 */}
+          <div style={{ fontSize:20, fontWeight:900, color: cash < 0 ? "#FF2A2A" : "white" }}>{won(cash)}</div>
           {spentCash > 0 && <div style={{ fontSize:10, opacity:.75, marginTop:3 }}>이번달 -{won(spentCash)}</div>}
         </div>
         <div style={{ flex:1, background:"rgba(255,255,255,.15)", borderRadius:16, padding:"12px 14px" }}>
           <div style={{ fontSize:10, fontWeight:800, opacity:.85, marginBottom:4 }}>💳 체크카드</div>
-          <div style={{ fontSize:20, fontWeight:900 }}>{won(card)}</div>
+          {/* 카드가 마이너스면 빨간색으로 변경 */}
+          <div style={{ fontSize:20, fontWeight:900, color: card < 0 ? "#FF2A2A" : "white" }}>{won(card)}</div>
           {spentCard > 0 && <div style={{ fontSize:10, opacity:.75, marginTop:3 }}>이번달 -{won(spentCard)}</div>}
         </div>
       </div>
