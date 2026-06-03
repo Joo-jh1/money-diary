@@ -403,12 +403,39 @@ function PostCard({ post, profile, onLike, onDelete, onEdit, onComment }) {
 }
 
 function EditModal({ post, onClose, onSave }) {
-  const [img, setImg] = useState(post.imageUrl); const [amount, setAmt] = useState(String(post.amount)); const [memo, setMemo] = useState(post.memo || "");
-  const [cat, setCat] = useState(post.category); const [sticker, setSt] = useState(post.sticker || ""); const [uploading, setUploading] = useState(false);
+  const [img, setImg] = useState(post.imageUrl); 
+  const [amount, setAmt] = useState(String(post.amount)); 
+  const [memo, setMemo] = useState(post.memo || "");
+  const [cat, setCat] = useState(post.category); 
+  const [sticker, setSt] = useState(post.sticker || ""); 
+  const [uploading, setUploading] = useState(false);
+  
+  // ★ 결제 수단 수정을 위해 기존 결제수단(기본값 cash)을 상태로 가져옵니다.
+  const [payMethod, setPay] = useState(post.payMethod || "cash"); 
+  
   const fileRef = useRef();
-  const handleFile = async (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = async ev => { const c = await compressImage(ev.target.result); setImg(c); setUploading(true); const u = await uploadToCloudinary(c); if (u) setImg(u); setUploading(false); }; r.readAsDataURL(f); };
-  const submit = () => { if (!amount) return; onSave({ ...post, imageUrl: img, amount: Number(amount), memo, category: cat, sticker }); onClose(); };
+  
+  const handleFile = async (e) => { 
+    const f = e.target.files[0]; if (!f) return; 
+    const r = new FileReader(); 
+    r.onload = async ev => { 
+      const c = await compressImage(ev.target.result); 
+      setImg(c); setUploading(true); 
+      const u = await uploadToCloudinary(c); if (u) setImg(u); 
+      setUploading(false); 
+    }; 
+    r.readAsDataURL(f); 
+  };
+
+  // ★ 저장할 때 payMethod도 같이 포함해서 부모 컴포넌트로 넘겨줍니다.
+  const submit = () => { 
+    if (!amount) return; 
+    onSave({ ...post, imageUrl: img, amount: Number(amount), memo, category: cat, sticker, payMethod }); 
+    onClose(); 
+  };
+  
   const cc = CAT(cat);
+  
   return (
     <div style={{ position:"fixed", inset:0, background:"white", zIndex:300, display:"flex", flexDirection:"column", overflow:"hidden" }}>
       <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid #f0f0f0", display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
@@ -424,14 +451,26 @@ function EditModal({ post, onClose, onSave }) {
           <div style={{ fontSize:13, color:"#aaa" }}>사진을 탭해서 변경하거나<br/>아래 내용만 수정할 수 있어요</div>
         </div>
         <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} style={{ display:"none" }} />
+        
+        {/* ★ [추가] 결제 수단 선택 UI (추가창이랑 똑같은 예쁜 버튼이야!) */}
+        <label style={{ display:"block", fontSize:11, fontWeight:800, color:"#bbb", letterSpacing:".06em", marginBottom:8 }}>결제 수단</label>
+        <div style={{ display:"flex", gap:10, marginBottom:18 }}>
+          <button onClick={() => setPay("cash")} style={{ flex:1, padding:"12px 0", borderRadius:16, border:`2px solid ${payMethod==="cash"?"#FF6B6B":"#eee"}`, background:payMethod==="cash"?"#fff0f0":"white", color:payMethod==="cash"?"#FF6B6B":"#aaa", fontSize:14, fontWeight:800, cursor:"pointer" }}>💵 현금</button>
+          <button onClick={() => setPay("card")} style={{ flex:1, padding:"12px 0", borderRadius:16, border:`2px solid ${payMethod==="card"?"#45B7D1":"#eee"}`, background:payMethod==="card"?"#f0f9ff":"white", color:payMethod==="card"?"#45B7D1":"#aaa", fontSize:14, fontWeight:800, cursor:"pointer" }}>💳 카드</button>
+        </div>
+
         <label style={{ display:"block", fontSize:11, fontWeight:800, color:"#bbb", letterSpacing:".06em", marginBottom:8 }}>카테고리</label>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:18 }}>{CATEGORIES.map(c => <button key={c.id} onClick={() => setCat(c.id)} style={{ padding:"6px 13px", borderRadius:20, border:`2px solid ${cat===c.id?c.color:"#eee"}`, background:cat===c.id?`${c.color}18`:"white", color:cat===c.id?c.color:"#aaa", fontSize:12, fontWeight:700, cursor:"pointer" }}>{c.emoji} {c.label}</button>)}</div>
+        
         <label style={{ display:"block", fontSize:11, fontWeight:800, color:"#bbb", letterSpacing:".06em", marginBottom:8 }}>금액</label>
         <div style={{ display:"flex", alignItems:"center", background:"#f8f8f8", borderRadius:16, padding:"0 18px", marginBottom:18 }}><span style={{ fontSize:20, fontWeight:900, color:cc.color }}>₩</span><input type="number" value={amount} onChange={e => setAmt(e.target.value)} style={{ flex:1, border:"none", background:"none", padding:"14px 8px", fontSize:28, fontWeight:900, color:"#1a1a2e", outline:"none" }} /></div>
+        
         <label style={{ display:"block", fontSize:11, fontWeight:800, color:"#bbb", letterSpacing:".06em", marginBottom:8 }}>메모</label>
         <textarea value={memo} onChange={e => setMemo(e.target.value)} rows={2} style={{ width:"100%", border:"none", background:"#f8f8f8", borderRadius:16, padding:"13px 16px", fontSize:14, resize:"none", outline:"none", boxSizing:"border-box", marginBottom:18 }} />
+        
         <label style={{ display:"block", fontSize:11, fontWeight:800, color:"#bbb", letterSpacing:".06em", marginBottom:8 }}>스티커</label>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:8, marginBottom:24 }}>{STICKERS.map(s => <button key={s} onClick={() => setSt(sticker===s?"":s)} style={{ fontSize:26, background:sticker===s?"#fff0f0":"#fafafa", border:`2px solid ${sticker===s?"#FF6B6B":"transparent"}`, borderRadius:12, padding:"6px 0", cursor:"pointer", transform:sticker===s?"scale(1.15)":"scale(1)" }}>{s}</button>)}</div>
+        
         <button onClick={submit} disabled={!amount} style={{ width:"100%", padding:16, borderRadius:18, border:"none", background:amount?"linear-gradient(135deg,#FF6B6B,#FF8E53)":"#eee", color:amount?"white":"#bbb", fontSize:16, fontWeight:900, cursor:amount?"pointer":"not-allowed" }}>수정 완료 ✓</button>
       </div>
     </div>
