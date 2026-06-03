@@ -585,11 +585,9 @@ function StatsTab({ posts, profile }) {
   const cashExp = expense.filter(p => !p.payMethod||p.payMethod==="cash").reduce((s,p)=>s+p.amount,0);
   const cardExp = expense.filter(p => p.payMethod==="card").reduce((s,p)=>s+p.amount,0);
 
-  // ★ [핵심 기능] 화면을 캡처해서 이미지 파일로 공유하는 함수
   const handleShareImage = async () => {
     setCapturing(true);
     
-    // 1. 화면 캡처용 라이브러리(html2canvas)가 없으면 인터넷에서 가져오기
     if (!window.html2canvas) {
       await new Promise((resolve) => {
         const script = document.createElement("script");
@@ -599,7 +597,6 @@ function StatsTab({ posts, profile }) {
       });
     }
 
-    // 2. 캡처할 영역 지정 (아래에 정의한 id="stats-print-area" 영역)
     const target = document.getElementById("stats-print-area");
     if (!target) {
       setCapturing(false);
@@ -607,14 +604,12 @@ function StatsTab({ posts, profile }) {
     }
 
     try {
-      // 3. 라이브러리로 화면을 그래픽 이미지(Canvas)로 굽기
       const canvas = await window.html2canvas(target, {
-        useCORS: true,      // 이미지 주소 깨짐 방지
-        scale: 2,           // 부모님이 글씨 잘 보이게 2배 고화질로 캡처
+        useCORS: true,
+        scale: 2,
         backgroundColor: "#f4f4f8"
       });
 
-      // 4. 구워진 이미지를 스마트폰이 인식할 수 있는 실제 파일(Blob)로 변환
       canvas.toBlob(async (blob) => {
         if (!blob) {
           alert("이미지 생성 실패 😢");
@@ -625,7 +620,6 @@ function StatsTab({ posts, profile }) {
         const fileName = `${profile?.nickname || "나"}_${selMonth}월_용돈통계.png`;
         const file = new File([blob], fileName, { type: "image/png" });
 
-        // 5. 모바일 브라우저 자체 공유창 기능으로 파일 넘겨주기
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
@@ -633,7 +627,6 @@ function StatsTab({ posts, profile }) {
             text: `💰 ${profile?.nickname || "나"}의 소비 정산서 사진입니다.`
           });
         } else {
-          // PC 브라우저 등 파일 공유가 불가능한 환경에서는 컴퓨터로 사진 강제 다운로드
           const a = document.createElement("a");
           a.href = canvas.toDataURL("image/png");
           a.download = fileName;
@@ -662,20 +655,13 @@ function StatsTab({ posts, profile }) {
         </div>
       </div>
 
-      {/* ★ [변경] 버튼을 누르면 긴 URL 대신 화면 전체를 깔끔한 사진 파일로 변환해서 전송합니다. */}
       <button onClick={handleShareImage} disabled={capturing} style={{ width:"100%", padding:"14px 0", borderRadius:18, border:"none", background: capturing ? "#ccc" : "linear-gradient(135deg,#FF6B6B,#FF8E53)", color:"white", fontSize:15, fontWeight:900, cursor: capturing ? "not-allowed" : "pointer", marginBottom:14, boxShadow:"0 4px 14px rgba(255,107,107,.35)" }}>
         {capturing ? "📸 리포트 사진 만드는 중..." : `📸 ${selMonth}월 통계 이미지로 부모님께 보내기`}
       </button>
 
-      {/* ★ [중요] 여기서부터 맨 아래까지 통째로 묶어서 스크린샷 찰칵 찍어줄 인쇄 구역 지정! */}
+      {/* ★ [수정됨] 상단 큰 타이틀 상자 배너를 깔끔하게 제거했습니다! */}
       <div id="stats-print-area" style={{ padding: "2px" }}>
         
-        {/* 임시 타이틀 배너 (이미지 파일 상단에 부모님이 읽기 좋게 타이틀을 달아줍니다) */}
-        <div style={{ background:"linear-gradient(135deg,#FF6B6B,#FF8E53)", borderRadius:20, padding:"16px", color:"white", textAlign:"center", marginBottom:14 }}>
-          <div style={{ fontSize:12, fontWeight:700, opacity:.8, marginBottom:4 }}>📊 용돈일기 소비 리포트</div>
-          <div style={{ fontSize:18, fontWeight:900 }}>{profile?.nickname || "나"}의 {selMonth}월 통계 보고서</div>
-        </div>
-
         {/* 수입/지출 요약 */}
         <div style={{ display:"flex", gap:10, marginBottom:14 }}>
           <div style={{ flex:1, background:"linear-gradient(135deg,#E8F5E9,#F1F8E9)", borderRadius:20, padding:"16px 18px", boxShadow:"0 2px 12px rgba(0,0,0,.06)", border:"2px solid #C8E6C9" }}>
