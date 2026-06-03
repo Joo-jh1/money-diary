@@ -217,6 +217,9 @@ function WalletCard({ wallet, posts, onEdit }) {
   const mp = posts.filter(p => thisMonth(p.date) && p.type !== "income");
   const spentCash = mp.filter(p => p.payMethod === "cash" || !p.payMethod).reduce((s,p) => s+p.amount, 0);
   const spentCard = mp.filter(p => p.payMethod === "card").reduce((s,p) => s+p.amount, 0);
+  const currentCash = cash - spentCash;
+const currentCard = card - spentCard;
+const currentTotal = currentCash + currentCard;
   const warn = total > 0 && (total / (total + spentCash + spentCard)) < 0.2;
   return (
     <div style={{ background:"linear-gradient(135deg,#FF6B6B,#FF8E53)", borderRadius:24, padding:"20px 20px 18px", marginBottom:16, color:"white", position:"relative", overflow:"hidden", boxShadow:"0 8px 28px rgba(255,107,107,0.32)" }}>
@@ -442,8 +445,36 @@ function AddModal({ onClose, onAdd }) {
   const [step, setStep] = useState(1); const [img, setImg] = useState(null); const [amount, setAmt] = useState(""); const [memo, setMemo] = useState("");
   const [cat, setCat] = useState("food"); const [sticker, setSt] = useState(""); const [payMethod, setPay] = useState("cash");
   const fileRef = useRef();
-  const handleFile = async (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = async ev => { const c = await compressImage(ev.target.result); setImg(c); setStep(2); const u = await uploadToCloudinary(c); if (u) setImg(u); }; r.readAsDataURL(f); };
-  const submit = () => { if (!amount) return; onAdd({ id: Date.now(), date: new Date().toISOString(), imageUrl: img, amount: Number(amount), memo, category: cat, sticker, liked: false, payMethod }); onClose(); };
+  
+  const handleFile = async (e) => { 
+    const f = e.target.files[0]; if (!f) return; 
+    const r = new FileReader(); 
+    r.onload = async ev => { 
+      const c = await compressImage(ev.target.result); 
+      setImg(c); setStep(2); 
+      const u = await uploadToCloudinary(c); if (u) setImg(u); 
+    }; 
+    r.readAsDataURL(f); 
+  };
+
+  // ★ 이 submit 함수에서 type: "expense"를 정확히 넣어주도록 수정함!
+  const submit = () => { 
+    if (!amount) return; 
+    onAdd({ 
+      id: Date.now(), 
+      date: new Date().toISOString(), 
+      type: "expense", // 이 부분이 들어가야 지갑에서 돈이 깎여!
+      imageUrl: img, 
+      amount: Number(amount), 
+      memo, 
+      category: cat, 
+      sticker, 
+      liked: false, 
+      payMethod 
+    }); 
+    onClose(); 
+  };
+
   const cc = CAT(cat);
   return (
     <div style={{ position:"fixed", inset:0, background:"white", zIndex:300, display:"flex", flexDirection:"column", overflow:"hidden" }}>
