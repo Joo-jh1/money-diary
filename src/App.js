@@ -214,39 +214,31 @@ function Onboarding({ onDone }) {
 // ════════════════════════════════════════════════════════════
 function WalletCard({ wallet, posts, onEdit }) {
   const cash = wallet.cash || 0; const card = wallet.card || 0; const total = cash + card;
-  const mp = posts.filter(p => thisMonth(p.date) && p.type !== "income");
-  const spentCash = mp.filter(p => p.payMethod === "cash" || !p.payMethod).reduce((s,p) => s+p.amount, 0);
-  const spentCard = mp.filter(p => p.payMethod === "card").reduce((s,p) => s+p.amount, 0);
   
-  // 잔액이 0원 미만(마이너스)인지 확인하는 조건
   const isMinus = total < 0;
-  const warn = isMinus || (total > 0 && (total / (total + spentCash + spentCard)) < 0.2);
 
   return (
     <div style={{ background:"linear-gradient(135deg,#FF6B6B,#FF8E53)", borderRadius:24, padding:"20px 20px 18px", marginBottom:16, color:"white", position:"relative", overflow:"hidden", boxShadow:"0 8px 28px rgba(255,107,107,0.32)" }}>
       <div style={{ position:"absolute", right:-24, top:-24, width:110, height:110, borderRadius:"50%", background:"rgba(255,255,255,.08)", pointerEvents:"none" }} />
       <div style={{ marginBottom:16, position:"relative", zIndex:10 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:4 }}>
-          {/* 마이너스면 총 잔액 글씨도 노란색 경고로 변경 */}
           <div style={{ fontSize:11, fontWeight:700, color: isMinus ? "#FFD93D" : "white", opacity:.9, letterSpacing:".06em", paddingTop:4 }}>💰 총 잔액</div>
           <button onClick={onEdit} style={{ background:"rgba(255,255,255,.28)", border:"2px solid rgba(255,255,255,.5)", color:"white", borderRadius:12, padding:"8px 18px", fontSize:14, cursor:"pointer", fontWeight:800, zIndex:20, position:"relative" }}>✏️ 설정</button>
         </div>
-        {/* ★ 마이너스면 금액 숫자가 새빨간색(#FF2A2A)으로 화끈하게 바뀝니다! */}
+        {/* 총 잔액이 마이너스면 빨간색 */}
         <div style={{ fontSize:34, fontWeight:900, letterSpacing:"-1px", color: isMinus ? "#FF2A2A" : "white", marginBottom:4 }}>{won(total)}</div>
         {isMinus && <div style={{ fontSize:12, color:"#FFD93D", fontWeight:900, animation:"pulse 1s infinite" }}>⚠️ 가진 돈보다 더 많이 썼어요!</div>}
       </div>
       <div style={{ display:"flex", gap:10, position:"relative", zIndex:10 }}>
         <div style={{ flex:1, background:"rgba(255,255,255,.15)", borderRadius:16, padding:"12px 14px" }}>
           <div style={{ fontSize:10, fontWeight:800, opacity:.85, marginBottom:4 }}>💵 현금</div>
-          {/* 현금이 마이너스면 빨간색으로 변경 */}
+          {/* 현금 마이너스 시 빨간색 표시 (작은 글씨는 완전히 지웠어!) */}
           <div style={{ fontSize:20, fontWeight:900, color: cash < 0 ? "#FF2A2A" : "white" }}>{won(cash)}</div>
-          {spentCash > 0 && <div style={{ fontSize:10, opacity:.75, marginTop:3 }}>이번달 -{won(spentCash)}</div>}
         </div>
         <div style={{ flex:1, background:"rgba(255,255,255,.15)", borderRadius:16, padding:"12px 14px" }}>
           <div style={{ fontSize:10, fontWeight:800, opacity:.85, marginBottom:4 }}>💳 체크카드</div>
-          {/* 카드가 마이너스면 빨간색으로 변경 */}
+          {/* 체크카드 마이너스 시 빨간색 표시 (작은 글씨는 완전히 지웠어!) */}
           <div style={{ fontSize:20, fontWeight:900, color: card < 0 ? "#FF2A2A" : "white" }}>{won(card)}</div>
-          {spentCard > 0 && <div style={{ fontSize:10, opacity:.75, marginTop:3 }}>이번달 -{won(spentCard)}</div>}
         </div>
       </div>
     </div>
@@ -772,7 +764,7 @@ export default function App() {
   useEffect(() => { LS.set("yd_wallet",  wallet);  }, [wallet]);
   useEffect(() => { LS.set("yd_goal",    goal);    }, [goal]);
 
-  // 1. 게시물 추가 시 잔액 직접 연산
+// 1. 게시물 추가 시 잔액 연산 (완전 마이너스 허용)
   const handleAdd = useCallback(p => {
     setPosts(prev => [p, ...prev]);
     setWallet(prev => { 
@@ -781,8 +773,8 @@ export default function App() {
         if (p.payMethod === "card") n.card = (n.card || 0) + p.amount;
         else n.cash = (n.cash || 0) + p.amount;
       } else {
-        if (p.payMethod === "card") n.card = Math.max(0, (n.card || 0) - p.amount);
-        else n.cash = Math.max(0, (n.cash || 0) - p.amount);
+        if (p.payMethod === "card") n.card = (n.card || 0) - p.amount;
+        else n.cash = (n.cash || 0) - p.amount;
       } 
       return n; 
     });
@@ -790,7 +782,7 @@ export default function App() {
 
   const handleEdit = useCallback(p => setEditPost(p), []);
   
-  // 2. 게시물 수정 시 잔액 직접 연산 (이전 금액 복구 후 신규 금액 차감/가산)
+  // 2. 게시물 수정 시 잔액 연산 (완전 마이너스 허용)
   const handleSaveEdit = useCallback(updated => {
     setPosts(prev => {
       const oldPost = prev.find(p => p.id === updated.id);
@@ -799,10 +791,10 @@ export default function App() {
       setWallet(walletPrev => {
         const n = { ...walletPrev };
 
-        // [단계 1] 기존 금액 효과 원상복구
+        // [단계 1] 기존 금액 원상복구
         if (oldPost.type === "income") {
-          if (oldPost.payMethod === "card") n.card = Math.max(0, (n.card || 0) - oldPost.amount);
-          else n.cash = Math.max(0, (n.cash || 0) - oldPost.amount);
+          if (oldPost.payMethod === "card") n.card = (n.card || 0) - oldPost.amount;
+          else n.cash = (n.cash || 0) - oldPost.amount;
         } else {
           if (oldPost.payMethod === "card") n.card = (n.card || 0) + oldPost.amount;
           else n.cash = (n.cash || 0) + oldPost.amount;
@@ -813,8 +805,8 @@ export default function App() {
           if (updated.payMethod === "card") n.card = (n.card || 0) + updated.amount;
           else n.cash = (n.cash || 0) + updated.amount;
         } else {
-          if (updated.payMethod === "card") n.card = Math.max(0, (n.card || 0) - updated.amount);
-          else n.cash = Math.max(0, (n.cash || 0) - updated.amount);
+          if (updated.payMethod === "card") n.card = (n.card || 0) - updated.amount;
+          else n.cash = (n.cash || 0) - updated.amount;
         }
 
         return n;
@@ -826,7 +818,7 @@ export default function App() {
 
   const handleLike = useCallback(id => setPosts(prev => prev.map(p => p.id===id?{...p,liked:true}:p)), []);
 
-  // 3. 게시물 삭제 시 잔액 직접 연산
+  // 3. 게시물 삭제 시 잔액 연산 (완전 마이너스 허용)
   const handleDelete = useCallback(id => {
     if (window.confirm("이 게시물을 삭제할까요?")) {
       setPosts(prev => {
@@ -836,8 +828,8 @@ export default function App() {
         setWallet(walletPrev => {
           const n = { ...walletPrev };
           if (targetPost.type === "income") {
-            if (targetPost.payMethod === "card") n.card = Math.max(0, (n.card || 0) - targetPost.amount);
-            else n.cash = Math.max(0, (n.cash || 0) - targetPost.amount);
+            if (targetPost.payMethod === "card") n.card = (n.card || 0) - targetPost.amount;
+            else n.cash = (n.cash || 0) - targetPost.amount;
           } else {
             if (targetPost.payMethod === "card") n.card = (n.card || 0) + targetPost.amount;
             else n.cash = (n.cash || 0) + targetPost.amount;
