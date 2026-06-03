@@ -256,12 +256,12 @@ function WalletModal({ wallet, onSave, onClose }) {
         <label style={{ display:"block", fontSize:11, fontWeight:800, color:"#bbb", letterSpacing:".06em", marginBottom:8 }}>💵 현금 잔액</label>
         <div style={{ display:"flex", alignItems:"center", background:"#f8f8f8", borderRadius:14, padding:"0 16px", marginBottom:16 }}>
           <span style={{ fontSize:18, fontWeight:900, color:"#FF6B6B" }}>₩</span>
-          <input type="number" placeholder="0" value={cash} onChange={e => setCash(e.target.value)} style={{ flex:1, border:"none", background:"none", padding:"13px 8px", fontSize:22, fontWeight:900, color:"#1a1a2e", outline:"none" }} />
+          <input type="number" placeholder="0" value={cash} onChange={e => setCash(e.target.value)} style={{ flex:1, border:"none", background:"none", padding:"14px 8px", fontSize:22, fontWeight:900, color:"#1a1a2e", outline:"none" }} />
         </div>
         <label style={{ display:"block", fontSize:11, fontWeight:800, color:"#bbb", letterSpacing:".06em", marginBottom:8 }}>💳 체크카드 잔액</label>
         <div style={{ display:"flex", alignItems:"center", background:"#f8f8f8", borderRadius:14, padding:"0 16px", marginBottom:24 }}>
           <span style={{ fontSize:18, fontWeight:900, color:"#45B7D1" }}>₩</span>
-          <input type="number" placeholder="0" value={card} onChange={e => setCard(e.target.value)} style={{ flex:1, border:"none", background:"none", padding:"13px 8px", fontSize:22, fontWeight:900, color:"#1a1a2e", outline:"none" }} />
+          <input type="number" placeholder="0" value={card} onChange={e => setCard(e.target.value)} style={{ flex:1, border:"none", background:"none", padding:"14px 8px", fontSize:22, fontWeight:900, color:"#1a1a2e", outline:"none" }} />
         </div>
         <div style={{ display:"flex", gap:10 }}>
           <button onClick={onClose} style={{ flex:1, padding:14, borderRadius:16, border:"2px solid #eee", background:"white", color:"#aaa", fontSize:14, cursor:"pointer", fontWeight:700 }}>취소</button>
@@ -658,7 +658,7 @@ function ProfileTab({ profile, posts, onEdit, onLike, onDelete, onEditPost }) {
       <div style={{ background:"white", borderRadius:22, padding:16, boxShadow:"0 2px 16px rgba(0,0,0,.06)" }}>
         <h3 style={{ margin:"0 0 14px", fontWeight:900, fontSize:15, color:"#1a1a2e" }}>📸 내 게시물</h3>
         {posts.length===0?<div style={{ textAlign:"center", padding:"30px 0", color:"#ddd" }}><div style={{ fontSize:40 }}>📷</div><div style={{ marginTop:8, fontSize:14 }}>아직 기록이 없어요</div></div>
-          :<div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:3 }}>{posts.map(p=>{const c=p.type==="income"?{color:"#66BB6A",emoji:"💵"}:CAT(p.category);return(<div key={p.id} onClick={()=>setSelectedPost(p)} style={{ aspectRatio:"1/1", borderRadius:8, overflow:"hidden", background:`${c.color}22`, cursor:"pointer", position:"relative" }}>{p.imageUrl?<img src={p.imageUrl} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:<div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:28 }}>{p.sticker||c.emoji}</div>}{p.type==="income"&&<div style={{ position:"absolute", top:4, right:4, background:"#2E7D32", borderRadius:8, padding:"2px 5px", fontSize:9, color:"white", fontWeight:800 }}>수입</div>}</div>);})}</div>
+          :<div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:3 }}>{posts.map(p=>{const c=p.type==="income"?{color:"#66BB6A",emoji:"💵"} : CAT(p.category);return(<div key={p.id} onClick={()=>setSelectedPost(p)} style={{ aspectRatio:"1/1", borderRadius:8, overflow:"hidden", background:`${c.color}22`, cursor:"pointer", position:"relative" }}>{p.imageUrl?<img src={p.imageUrl} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:<div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:28 }}>{p.sticker||c.emoji}</div>}{p.type==="income"&&<div style={{ position:"absolute", top:4, right:4, background:"#2E7D32", borderRadius:8, padding:"2px 5px", fontSize:9, color:"white", fontWeight:800 }}>수입</div>}</div>);})}</div>
         }
       </div>
     </div>
@@ -697,7 +697,7 @@ function ProfileEditModal({ profile, onSave, onClose }) {
 }
 
 // ════════════════════════════════════════════════════════════
-// 메인 앱 (완벽한 자동 동기화 적용 버전)
+// 메인 앱 (직관적 잔액 계산 방식)
 // ════════════════════════════════════════════════════════════
 export default function App() {
   const statsParam = new URLSearchParams(window.location.search).get("stats");
@@ -730,73 +730,87 @@ export default function App() {
     }
   }, []);
 
-  // [핵심 해결책] posts 배열이 수정/삭제로 인해 바뀔 때마다 지갑 데이터도 실시간으로 처음부터 완벽하게 자동 계산!
-  useEffect(() => {
-    // 사용자가 '잔액 설정' 모달 창을 통해 직접 잔액을 고치는 상황도 있으므로,
-    // 게시물 총합을 기준으로 현재 잔액을 역산하여 동기화해 줍니다.
-    setWallet(prevWallet => {
-      // 1. 기존 localstorage 혹은 메모리에 저장되어 있던 순수 자산을 구하기 위해
-      // 현재 posts 기록들의 효과를 전부 되돌려 '기준(영점) 자산'을 구합니다.
-      const savedWallet = LS.get("yd_wallet", { cash: 0, card: 0 });
-      const currentPosts = LS.get("yd_posts", []);
-      
-      let baseCash = savedWallet.cash;
-      let baseCard = savedWallet.card;
-      
-      // 저장되어있던 posts의 효과 제거
-      currentPosts.forEach(p => {
-        if (p.type === "income") {
-          if (p.payMethod === "card") baseCard -= p.amount;
-          else baseCash -= p.amount;
-        } else {
-          if (p.payMethod === "card") baseCard += p.amount;
-          else baseCash += p.amount;
-        }
-      });
-
-      // 2. 구한 '기준 자산'에 현재 화면 상에 바뀐 최신 posts의 내역을 새롭게 순서대로 전부 적용합니다.
-      let newCash = baseCash;
-      let newCard = baseCard;
-      
-      // 최신 posts 내역 적용 (역순 처리하여 시간순 연산)
-      [...posts].reverse().forEach(p => {
-        if (p.type === "income") {
-          if (p.payMethod === "card") newCard += p.amount;
-          else newCash += p.amount;
-        } else {
-          if (p.payMethod === "card") newCard = Math.max(0, newCard - p.amount);
-          else newCash = Math.max(0, newCash - p.amount);
-        }
-      });
-
-      return { cash: newCash, card: newCard };
-    });
-
-    // 최신 posts 목록을 스토리지에 저장
-    LS.set("yd_posts", posts);
-  }, [posts]);
-
+  // 단순 동기화용 이펙트
   useEffect(() => { LS.set("yd_profile", profile); }, [profile]);
-  // wallet 상태 변경 시에만 localstorage에 기록해 줍니다.
-  useEffect(() => { LS.set("yd_wallet", wallet); }, [wallet]);
+  useEffect(() => { LS.set("yd_posts",   posts);   }, [posts]);
+  useEffect(() => { LS.set("yd_wallet",  wallet);  }, [wallet]);
   useEffect(() => { LS.set("yd_goal",    goal);    }, [goal]);
 
-  // 단순 데이터 추가/수정/삭제 이벤트 함수 (더 이상 잔액 상태를 수동으로 어지럽히지 않음)
+  // 1. 게시물 추가 시 잔액 직접 연산
   const handleAdd = useCallback(p => {
     setPosts(prev => [p, ...prev]);
+    setWallet(prev => { 
+      const n = { ...prev }; 
+      if (p.type === "income") {
+        if (p.payMethod === "card") n.card = (n.card || 0) + p.amount;
+        else n.cash = (n.cash || 0) + p.amount;
+      } else {
+        if (p.payMethod === "card") n.card = Math.max(0, (n.card || 0) - p.amount);
+        else n.cash = Math.max(0, (n.cash || 0) - p.amount);
+      } 
+      return n; 
+    });
   }, []);
 
   const handleEdit = useCallback(p => setEditPost(p), []);
   
+  // 2. 게시물 수정 시 잔액 직접 연산 (이전 금액 복구 후 신규 금액 차감/가산)
   const handleSaveEdit = useCallback(updated => {
-    setPosts(prev => prev.map(p => p.id === updated.id ? updated : p));
+    setPosts(prev => {
+      const oldPost = prev.find(p => p.id === updated.id);
+      if (!oldPost) return prev;
+
+      setWallet(walletPrev => {
+        const n = { ...walletPrev };
+
+        // [단계 1] 기존 금액 효과 원상복구
+        if (oldPost.type === "income") {
+          if (oldPost.payMethod === "card") n.card = Math.max(0, (n.card || 0) - oldPost.amount);
+          else n.cash = Math.max(0, (n.cash || 0) - oldPost.amount);
+        } else {
+          if (oldPost.payMethod === "card") n.card = (n.card || 0) + oldPost.amount;
+          else n.cash = (n.cash || 0) + oldPost.amount;
+        }
+
+        // [단계 2] 새로운 금액 적용
+        if (updated.type === "income") {
+          if (updated.payMethod === "card") n.card = (n.card || 0) + updated.amount;
+          else n.cash = (n.cash || 0) + updated.amount;
+        } else {
+          if (updated.payMethod === "card") n.card = Math.max(0, (n.card || 0) - updated.amount);
+          else n.cash = Math.max(0, (n.cash || 0) - updated.amount);
+        }
+
+        return n;
+      });
+
+      return prev.map(p => p.id === updated.id ? updated : p);
+    });
   }, []);
 
   const handleLike = useCallback(id => setPosts(prev => prev.map(p => p.id===id?{...p,liked:true}:p)), []);
 
+  // 3. 게시물 삭제 시 잔액 직접 연산
   const handleDelete = useCallback(id => {
     if (window.confirm("이 게시물을 삭제할까요?")) {
-      setPosts(prev => prev.filter(p => p.id !== id));
+      setPosts(prev => {
+        const targetPost = prev.find(p => p.id === id);
+        if (!targetPost) return prev;
+
+        setWallet(walletPrev => {
+          const n = { ...walletPrev };
+          if (targetPost.type === "income") {
+            if (targetPost.payMethod === "card") n.card = Math.max(0, (n.card || 0) - targetPost.amount);
+            else n.cash = Math.max(0, (n.cash || 0) - targetPost.amount);
+          } else {
+            if (targetPost.payMethod === "card") n.card = (n.card || 0) + targetPost.amount;
+            else n.cash = (n.cash || 0) + targetPost.amount;
+          }
+          return n;
+        });
+
+        return prev.filter(p => p.id !== id);
+      });
     }
   }, []);
 
