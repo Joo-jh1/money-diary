@@ -1183,6 +1183,7 @@ export default function App() {
   const [showWallet, setShowWallet] = useState(false);
   const [showGoal,   setShowGoal]   = useState(false);
   const [showProfileEdit, setShowProfileEdit] = useState(false);
+  const [commentPostId, setCommentPostId] = useState(null);
 
   // Service Worker 등록 (자동 업데이트)
   useEffect(() => {
